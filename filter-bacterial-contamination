@@ -1,0 +1,154 @@
+## These steps are for using the Kraken tool to filter out potential bacterial contamination from a ddRADseq dataset.
+
+## Step 1. Concatenate your input files from multiple lanes
+## First enter the directory with the sequences you want to analyze
+cd /path/to/directory/
+## Separate your files into separate directories for R1s and R2s
+mkdir R1s
+mkdir R2s
+cp *R1_001.fastq.gz ./R1s/
+cp *R2_001.fastq.gz ./R2s/
+## Enter the directory and concatenate the files
+## Don’t forget to run the following commands in both directories (R1s and R2s)
+cd ./R1s/
+## Use a simple loop to concatenate files with a given syntax.
+## You will need to create a new loop for each syntax
+for file in ??_??_???_????_*.fastq.gz; do  cat $file >>${file%_*}.fastq.gz; done
+## Remove the input data files
+## You will need to run this command for every lane, so edit and run as needed
+rm *001.fastq.gz
+## Use the same loop to concatenate again
+## Don’t forget to run any loops you created for each syntax
+for file in ??_??_???_????_*.fastq.gz; do  cat $file >>${file%_*}.fastq.gz; done
+## Remove the input data files
+## Don’t forget to change the "R1" to "R2" for the R2s directory
+rm *R1.fastq.gz
+## Use a third loop to concatenate again
+## Notice that five characters (????_) have been removed from the syntax of the loop
+for file in ??_??_???_*.fastq.gz; do  cat $file >>${file%_*}.fastq.gz; done
+## Remove the input data
+## You will need to run a variation of this command for each lane of data
+rm *001.fastq.gz
+## Rename the files to the appropriate format for Kraken
+## Don’t forget to change the "R1" to "R2" for the R2s directory
+for f in *; do NEW=${f%.fastq.gz}_R1.fastq.gz; mv ${f} "${NEW}"; done
+
+2. Generate a commands.txt file to reference in the job submission
+## Return to your original directory and create a new one for running Kraken
+cd ..
+mkdir Kraken
+## Copy your concatenated and properly formatted files into the Kraken directory
+cd ./R1s/
+cp *.fastq.gz /path/to/directory/Kraken/
+cd ..
+cd ./R2s/
+cp *.fastq.gz /path/to/directory/Kraken/
+## Return to to the Kraken directory
+cd ..
+cd ./Kraken/
+## Use a loop to create a commands.txt file with Kraken commands for each sample
+for filename in *_R1.fastq.gz; do
+sample="${filename%_R1.fastq.gz}";
+echo "kraken --fastq-input --fastq-output --gzip-compressed --unclassified-out \
+unc_$sample --classified-out class_$sample --out-fmt paired --output ${sample}_kraken.out \
+--paired ${sample}_R1.fastq.gz ${sample}_R2.fastq.gz" >> commands.txt
+done
+
+3. Make sure that the commands.txt file looks right (use vim commands.txt to view the file)– each individual should have a single line that looks like this (if text is wrapped, expand the window to make sure that it is a single line): 
+kraken --fastq-input --fastq-output --gzip-compressed --unclassified-out unc_your_sample --classified-out class_your_sample --out-fmt paired --output your_sample_kraken.out --paired your_sample_R1.fastq.gz your_sample_R2.fastq.gz
+
+4. Cut the first line (the command for the first individual) and paste it into a text file outside of terminal – it will be used in a *.sh file for job submission
+
+5. Create a *.sh file based on the below sample and the command you cut out 
+## Create a new file in your Kraken directory using vim
+vim yournamehere.sh
+## Use Shift+I to enter “Insert” mode, press ESC to exit
+
+6. Sample *.sh file for Kraken job submission – be sure to add the --preload to the command you cut out
+#BSUB -L /bin/bash              # uses the bash login shell to initialize the job's execution environment.
+#BSUB -J tjraszick_kraken_pe    # job name
+#BSUB -n 4                      # assigns 4 cores for execution
+#BSUB -R "span[ptile=4]"        # assigns 4 cores per node
+#BSUB -R "rusage[mem=248750]"   # reserves 248750MB memory per core
+#BSUB -M 248750                 # sets to 248750MB per process enforceable memory limit. (M * n)
+#BSUB -q xlarge
+#BSUB -W 96:00                  # sets to 24 hour the job's runtime wall-clock limit.
+#BSUB -o stdout.%J              # directs the job's standard output to stdout.jobid
+#BSUB -e stderr.%J              # directs the job's standard error to stderr.jobid
+
+module load Westmere
+module load Kraken/1.1-GCCcore-6.3.0-Perl-5.24.0
+<<README
+    - Kraken manual: https://ccb.jhu.edu/software/kraken/MANUAL.html
+README
+
+################################################################################
+# TODO Edit these variables as needed:
+export KRAKEN_DEFAULT_DB='bacteria'
+export KRAKEN_DB_PATH='/scratch/datasets/kraken'
+export KRAKEN_NUM_THREADS=10
+
+pe1_1='/path/to/directory/Kraken/your_sample_R1.fastq.gz'
+pe1_2='/path/to/directory/Kraken/your_sample_R2.fastq.gz'
+unc_out_prefix='unc_your_sample_'
+class_out_prefix='class_your_sample_'
+
+
+################################################################################
+# you only need to run --preload for the first command if you have multiple samples
+kraken --fastq-input --fastq-output --gzip-compressed --unclassified-out $out_prefix --classified-out $out_prefix --out-fmt paired --output kraken.out --preload --paired $pe1_1 $pe1_2
+tamulauncher commands.txt
+
+# annotate classified hits, currently comment disabled
+# kraken-translate kraken.out > sequences.labels
+
+# show report of percentage of hits to database entries, currently comment disabled
+# kraken-report kraken.out > report.out
+
+<<CITATION
+    - Acknowledge TAMU HPRC: https://hprc.tamu.edu/research/citations.html
+    - Kraken:
+        Wood DE, Salzberg SL: Kraken: ultrafast metagenomic sequence classification
+        using exact alignments. Genome Biology 2014, 15:R46.
+CITATION
+
+7. Submit the job
+## Quit vim
+:wq!
+## Submit the job
+bsub < yournamehere.sh
+
+8. Compress and reformat your Kraken output files for dDocent
+## Return to your original directory and create a new one for running dDocent
+cd ..
+mkdir dDocent
+## Copy your Kraken output files into the dDocent directory
+cd ./Kraken/
+cp unc*.fastq.gz /path/to/directory/dDocent/
+cd ..
+cd ./dDocent/
+## Create a commands.txt for compressing the files
+for filename in *.fastq; do	
+echo "gzip $filename" >> commands.txt
+done
+## Create the job submission file using vim yournamehere.sh
+#BSUB -L /bin/bash 
+#BSUB -J gzip
+#BSUB -o stdout.%J
+#BSUB -e stderr.%J
+#BSUB -n 100
+#BSUB -R "span[ptile=20]"
+#BSUB -R "rusage[mem=2500]"
+#BSUB -M 2500
+#BSUB -W 72:00
+
+tamulauncher --commands-pernode 20 commands.txt
+
+## Submit the compression job
+bsub < yournamehere.sh
+## Reformat your files into the proper naming convention for dDocent (with no sub-population)
+## Don’t forget to change the "R1" to "R2" for the R2 files
+for f in *_R1* ; do mv "$f"  "$(awk -F '[_]' '{ print $2 "_" $3 ".R.fq.gz" }' <<< "$f")"; done
+## Reformat your files into the proper naming convention for dDocent (with a sub population) 
+## Don’t forget to change the "R1" to "R2" for the R2 files
+for f in *_R1* ; do mv "$f"  "$(awk -F '[_]' '{ print $2 $3 "_" $4 ".F.fq.gz" }' <<< "$f")"; done
