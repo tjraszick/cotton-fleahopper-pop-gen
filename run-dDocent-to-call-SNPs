@@ -1,0 +1,62 @@
+## Step 1. In your dDocent directory (with the input files) use vim to create a configuration file
+vim config
+## Use Shift+I to enter insert mode
+
+## Step 2. Sample config file
+Number of Processors
+40
+Maximum Memory
+2T
+Trimming
+yes
+Assembly?
+yes
+Type_of_Assembly
+PE
+Clustering_Similarity%
+0.90
+Mapping_Reads?
+yes
+Mapping_Match_Value
+1
+Mapping_MisMatch_Value
+4
+Mapping_GapOpen_Penalty
+6
+Calling_SNPs?
+yes
+Email
+tjraszick@tamu.edu
+
+## Step 3. Quit vim - press ESC and type the command
+:wq!
+
+## Step 4. Use vim to create a job submission file
+vim yournamehere.sh
+## Use Shift+I to enter insert mode
+
+## Step 5. Sample job submission file
+#BSUB -L /bin/bash
+#BSUB -J Raszick_dDocent_BW
+#BSUB -n 40
+#BSUB -R "select[mem2tb]"
+#BSUB -R "span[ptile=40]"
+#BSUB -R "rusage[mem=49750]"
+#BSUB -M 49750
+#BSUB -q xlarge
+#BSUB -W 240:00
+#BSUB -o stdout.%J
+#BSUB -e stderr.%J
+
+module load Westmere
+
+module load dDocent/2.2.16-intel-2017A-Java-1.8.0
+
+printf "3\n10\n" > cutoff
+dDocent config < cutoff
+
+## Step 6. Submit the dDocent job
+Quit vim - press ESC and type the command
+:wq!
+## Submit the job
+bsub < yournamehere.sh
