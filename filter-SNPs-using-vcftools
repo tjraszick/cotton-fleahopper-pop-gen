@@ -1,0 +1,38 @@
+## Step 1. Create a new sub-directory called vcftools and copy your dDocent output
+mkdir vcftools
+cp Final.recode.vcf ./vcftools/
+
+## Step 2. Upload a popmap.txt file (sample below; copy into vim or use an FTP such as Filezilla) 
+Individual1	Population1
+Individual2	Population1
+Individual3	Population2
+Individual4	Population2
+
+## Step 3. Use vcftools and vcffilter to filter SNPs to high quality, reliable loci
+## Load the necessary modules
+module purge
+module load vcflib/1.0.0-rc1-GCCcore-6.3.0
+module load Mawk/1.3.4-GCCcore-6.3.0-20150503
+module load VCFtools/0.1.15-GCCcore-6.3.0-Perl-5.24.0
+## First filtering of SNPs by missing data and quality
+vcftools --vcf Final.recode.vcf --max-missing 1.0 --mac 3 --maf 0.001 --max-maf 0.499 --minQ 30 --recode --recode-INFO-all --out your_project
+## Test individuals for missing data
+vcftools --vcf your_project.recode.vcf --missing-indv
+## Make a list of individuals with more than %% missing data
+awk '$5 > 0' out.imiss | cut -f1 > lowDP.indv
+## Remove those individuals
+vcftools --vcf your_project.recode.vcf --remove lowDP.indv --recode --recode-INFO-all --out your_project_HQ
+## Get the script
+curl -L -O https://github.com/jpuritz/dDocent/raw/master/scripts/pop_missing_filter.sh
+## Enable the script
+chmod +x pop_missing_filter.sh
+## Run script to remove bad loci
+./pop_missing_filter.sh your_project_HQ.recode.vcf popmap.txt 0.5 15 your_project_HQ2
+## Get info about the new file
+awk '/#/' your_project_HQ2.recode.vcf
+curl -L -O https://github.com/jpuritz/dDocent/raw/master/scripts/dDocent_filters
+chmod +x dDocent_filters
+./dDocent_filters your_project_HQ2.recode.vcf your_project_HQ3
+curl -L -O https://github.com/jpuritz/dDocent/raw/master/scripts/filter_hwe_by_pop.pl
+chmod +x filter_hwe_by_pop.pl
+./filter_hwe_by_pop.pl -v your_project_HQ3.FIL.recode.vcf -p popmap.txt -o your_project_HWF
